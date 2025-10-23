@@ -1,0 +1,100 @@
+/*
+Copyright © 2025 NAME HERE <EMAIL ADDRESS>
+*/
+package cmd
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"strconv"
+	"strings"
+
+	"github.com/spf13/cobra"
+)
+
+// freeCmd represents the free command
+var freeCmd = &cobra.Command{
+	Use:   "free [PORT]",
+	Short: "Free a port by killing the process that is using it",
+	Long: `This command kills the process holding the specified port.
+It should be run with sudo privileges to ensure it can kill processes.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		port := args[0]
+
+		// Check if the command is running with sudo privileges
+		if os.Geteuid() != 0 {
+			fmt.Println("WARNING: This command should be run with sudo.")
+			return
+		}
+
+		// Run the lsof and kill commands
+		freePort(port)
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(freeCmd)
+
+	// Here you will define your flags and configuration settings.
+
+	// Cobra supports Persistent Flags which will work for this command
+	// and all subcommands, e.g.:
+	// freeCmd.PersistentFlags().String("foo", "", "A help for foo")
+
+	// Cobra supports local flags which will only run when this command
+	// is called directly, e.g.:
+	// freeCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+func freePort(port string) {
+	// Execute the lsof command to find the process on the specified port
+	cmd := exec.Command("sudo", "lsof", "-t", "-i", ":"+port)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("Error finding processes using port %s:\n%v\n", port, err)
+		return
+	}
+
+	// Get the process IDs and kill them
+	pids := string(output)
+	if pids == "" {
+		fmt.Printf("No processes are using port %s.\n", port)
+		return
+	}
+
+	// Split the PIDs and terminate each process
+	for _, pid := range splitLines(pids) {
+		pid = pid // Clean the PID to remove any extra whitespace
+		if pid != "" {
+			pidInt, err := strconv.Atoi(pid)
+			if err != nil {
+				fmt.Printf("Invalid PID found: %s\n", pid)
+				continue
+			}
+            fmt.Printf("Killing pid: %d\n", pidInt)
+			killProcess(pidInt)
+		}
+	}
+}
+
+func splitLines(str string) []string {
+	return strings.Split(str, "\n")
+}
+
+func killProcess(pid int) {
+	// Run the kill command with -9 option to kill the process
+	cmd := exec.Command("sudo", "kill", "-9", strconv.Itoa(pid))
+	err := cmd.Run()
+	if err != nil {
+		// fmt.Printf("Failed to kill process with PID %d: %v\n", pid, err)
+		return
+	}
+	// fmt.Printf("Successfully killed process with PID %d.\n", pid)
+}
+
+func init() {
+	// Add the freeCmd to the root command (or another appropriate place in your CLI structure)
+	rootCmd.AddCommand(freeCmd)
+}

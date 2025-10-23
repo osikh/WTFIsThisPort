@@ -1,0 +1,299 @@
+/*
+Copyright © 2025 NAME HERE <EMAIL ADDRESS>
+*/
+package cmd
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"os/exec"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/jedib0t/go-pretty/table"
+	"github.com/jedib0t/go-pretty/text"
+	"github.com/spf13/cobra"
+)
+
+var (
+    flagUDP  bool
+    flagAll  bool
+)
+
+const (
+    Green   = "\033[32m" // LISTEN
+    Blue    = "\033[34m" // ESTABLISHED
+    Yellow  = "\033[33m" // TIME_WAIT, others
+    Reset   = "\033[0m"
+)
+
+type PortEntry struct {
+    Port     int
+    PID      string
+    Process  string
+    User     string
+    State    string
+    To       string // for ESTABLISHED connections
+}
+
+// listCmd represents the list command
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List all listening ports and their owning processes",
+	Run: func(cmd *cobra.Command, args []string) {
+		switch runtime.GOOS {
+        case "windows":
+            out, _ := exec.Command("netstat", "-ano").CombinedOutput()
+            fmt.Println(string(out))
+        default:
+            // out, _ := exec.Command("lsof", "-iTCP", "-P", "-n").CombinedOutput()
+            // fmt.Println(string(out))
+			wtportList(flagAll, flagUDP)
+			if (os.Geteuid() != 0) {
+				fmt.Println("\033[33m=> Try running with sudo for full result\033[0m")
+			}
+        }
+	},
+}
+
+func init() {
+    listCmd.Flags().BoolVarP(&flagUDP, "udp", "u", false, "Show only UDP ports")
+    listCmd.Flags().BoolVarP(&flagAll, "all", "a", false, "Show all ports (TCP + UDP)")
+	rootCmd.AddCommand(listCmd)
+
+	// Here you will define your flags and configuration settings.
+
+	// Cobra supports Persistent Flags which will work for this command
+	// and all subcommands, e.g.:
+	// listCmd.PersistentFlags().String("foo", "", "A help for foo")
+
+	// Cobra supports local flags which will only run when this command
+	// is called directly, e.g.:
+	// listCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+func wtportList(all bool, udp bool) {
+    if all {
+        tcpEntries := parseLsofOutput(false, true)
+        udpEntries := parseLsofOutput(true, false)
+        estEntries := []PortEntry{}
+        others := []PortEntry{}
+
+        for _, e := range tcpEntries {
+            if e.State == "ESTABLISHED" {
+                estEntries = append(estEntries, e)
+            } else {
+                others = append(others, e)
+            }
+        }
+
+        printPrettyTable(others, "TCP LISTENING")
+        printPrettyTable(estEntries, "TCP ESTABLISHED")
+        printPrettyTable(udpEntries, "UDP PORTS")
+    } else {
+        entries := parseLsofOutput(udp, !udp)
+        printPrettyTable(entries, "Ports")
+    }
+}
+
+func printTable(entries []PortEntry, title string) {
+    fmt.Println(title)
+    fmt.Println("PORT\tPID\tPROCESS\tUSER\tSTATE/TO")
+    for _, e := range entries {
+        color := Yellow
+        displayState := e.State
+        if e.State == "LISTEN" {
+            color = Green
+        } else if e.State == "ESTABLISHED" {
+            color = Blue
+            displayState = e.To
+        }
+
+        fmt.Printf("%d\t%s\t%s\t%s\t%s%s%s\n",
+            e.Port, e.PID, e.Process, e.User, color, displayState, Reset)
+    }
+    fmt.Println()
+}
+
+func printPrettyTable(entries []PortEntry, title string) {
+    t := table.NewWriter()
+    t.SetOutputMirror(os.Stdout)
+    t.SetTitle(title)
+    t.AppendHeader(table.Row{"PORT", "PID", "PROCESS", "USER", "STATE/TO"})
+
+    seen := make(map[string]bool)
+    for _, e := range entries {
+        key := fmt.Sprintf("%d-%s-%s-%s", e.Port, e.Process, e.User, e.State)
+        if seen[key] {
+            continue // skip if key matches
+        }
+        seen[key] = true // to avoid duplicate
+        display := e.State
+        if e.State == "ESTABLISHED" {
+            display = e.To
+        }
+
+        t.AppendRow(table.Row{e.Port, e.PID, e.Process, e.User, display})
+        // Optional coloring
+        switch e.State {
+        case "LISTEN":
+            t.Style().Color.Row = text.Colors{text.FgGreen}
+        case "ESTABLISHED":
+            t.Style().Color.Row = text.Colors{text.FgBlue}
+        default:
+            t.Style().Color.Row = text.Colors{text.FgYellow}
+        }
+    }
+
+    t.Render()
+}
+
+func parseLsofOutput(udpOnly bool, tcpOnly bool) []PortEntry {
+    args := []string{"-i", "-P", "-n"}
+    cmd := exec.Command("lsof", args...)
+    out, err := cmd.Output()
+    if err != nil {
+        fmt.Println("\033[31m❌ Error running lsof:\033[0m", err)
+        os.Exit(1)
+    }
+
+    var entries []PortEntry
+    scanner := bufio.NewScanner(strings.NewReader(string(out)))
+    for scanner.Scan() {
+        line := scanner.Text()
+        fields := strings.Fields(line)
+        if len(fields) < 9 {
+            continue
+        }
+
+        proto := fields[7]
+        if tcpOnly && !strings.HasPrefix(proto, "TCP") {
+            continue
+        }
+        if udpOnly && !strings.HasPrefix(proto, "UDP") {
+            continue
+        }
+
+        addressField := fields[8]
+
+        // portStr := extractPort(addressField)
+        // port, _ := strconv.Atoi(portStr)
+
+        entry := PortEntry{
+            Port:    0,
+            PID:     fields[1],
+            Process: fields[0],
+            User:    fields[2],
+        }
+
+        name := fields[len(fields)-1]
+        state := ""
+        to := ""
+        portStr := ""
+
+        if strings.Contains(name, "->") {
+            parts := strings.Split(name, "->")
+            left := parts[0]
+            right := parts[1]
+
+            // Extract state
+            if strings.Contains(right, "(") {
+                toPart := strings.SplitN(right, "(", 2)
+                to = strings.TrimSpace(toPart[0])
+                state = strings.TrimRight(strings.TrimSpace(toPart[1]), ")")
+            }
+
+            portPart := strings.Split(left, ":")
+            portStr := portPart[len(portPart)-1]
+
+        } else {
+            // LISTEN or UDP entries
+            segs := strings.SplitN(name, "(", 2)
+            portPart := strings.Split(segs[0], ":")
+            portStr := portPart[len(portPart)-1]
+            state = strings.TrimRight(strings.TrimSpace(segs[1]), ")")
+        }
+
+        entry.To = to
+        entry.State = state
+        entry.Port, _ = strconv.Atoi(portStr)
+
+        // Determine the "To" or "Host:Port" column based on connection type
+        if strings.Contains(addressField, "->") {
+            // Active connection, e.g. "127.0.0.1:55284->127.0.0.1:80"
+            parts := strings.Split(addressField, "->")
+            if len(parts) == 2 {
+                entry.To = strings.TrimSpace(parts[1])
+            } else {
+                entry.To = "?"
+            }
+            entry.State = "ESTABLISHED"
+
+        } else if strings.Contains(addressField, ":") {
+            // Listening or local binding
+            host, portPart := splitHostPort(addressField)
+            entry.To = fmt.Sprintf("%s:%s", host, portPart)
+            entry.State = strings.Trim(state, "()")
+
+        } else {
+            // Fallback if parsing fails
+            entry.To = "-"
+            entry.State = strings.Trim(state, "()")
+        }
+
+        entries = append(entries, entry)
+    }
+
+    // Sort results by port
+    sort.Slice(entries, func(i, j int) bool {
+        return entries[i].Port < entries[j].Port
+    })
+
+    return entries
+}
+
+func extractPort(addr string) string {
+    // Handles things like "127.0.0.1:3306", "0.0.0.0:80", "[::]:443"
+    if strings.Contains(addr, "->") {
+        parts := strings.Split(addr, "->")
+        addr = strings.TrimSpace(parts[len(parts)-1])
+    }
+    if strings.Contains(addr, ":") {
+        lastColon := strings.LastIndex(addr, ":")
+        return addr[lastColon+1:]
+    }
+    return "0"
+}
+
+func splitHostPort(addr string) (string, string) {
+    // Handles IPv6 and IPv4 gracefully
+    if strings.HasPrefix(addr, "[") {
+        // IPv6 like [::]:443
+        end := strings.Index(addr, "]")
+        if end != -1 {
+            host := addr[1:end]
+            port := addr[end+2:]
+            return host, port
+        }
+    }
+
+    if strings.Contains(addr, ":") {
+        lastColon := strings.LastIndex(addr, ":")
+        return addr[:lastColon], addr[lastColon+1:]
+    }
+
+    // Fallback
+    return addr, "?"
+}
+
+// extract the remote endpoint for ESTABLISHED connections
+func extractTo(addr string) string {
+    if strings.Contains(addr, "->") {
+        parts := strings.Split(addr, "->")
+        return parts[1]
+    }
+    return "-"
+}
