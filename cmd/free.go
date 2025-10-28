@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -23,14 +24,12 @@ It should be run with sudo privileges to ensure it can kill processes.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		port := args[0]
 
-		// Check if the command is running with sudo privileges
-		if os.Geteuid() != 0 {
-			fmt.Println("WARNING: This command should be run with sudo.")
-			return
+		switch runtime.GOOS {
+		case "windows":
+			freeWindowsPort(port)
+		default:
+			freeLinuxPort(port)
 		}
-
-		// Run the lsof and kill commands
-		freeLinuxPort(port)
 	},
 }
 
@@ -49,6 +48,11 @@ func init() {
 }
 
 func freeLinuxPort(port string) {
+	if os.Geteuid() != 0 {
+		fmt.Println("WARNING: This command should be run with sudo.")
+		return
+	}
+
 	// Execute the lsof command to find the process on the specified port
 	cmd := exec.Command("sudo", "lsof", "-t", "-i", ":"+port)
 	output, err := cmd.CombinedOutput()
@@ -80,6 +84,50 @@ func freeLinuxPort(port string) {
 			if errr != nil {
 				// fmt.Printf("Failed to kill process with PID %d: %v\n", pid, err)
 			}
+		}
+	}
+}
+
+func freeWindowsPort(port string) {
+	// Check if running with elevated privileges on Windows
+	if err := exec.Command("net", "session").Run(); err != nil {
+		fmt.Println("WARNING: This command should be run with elevated privileges.")
+		return
+	}
+
+	// Use netstat to find processes listening on the specified port
+	cmd := exec.Command("cmd", "/C", "netstat -ano | findstr :"+port)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("Error finding processes using port %s:\n%v\n", port, err)
+		return
+	}
+
+	outStr := string(output)
+	if strings.TrimSpace(outStr) == "" {
+		fmt.Printf("No processes are using port %s.\n", port)
+		return
+	}
+
+	// Parse the netstat output to extract PIDs
+	lines := strings.Split(outStr, "\n")
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+		pidStr := fields[len(fields)-1]
+		pidInt, err := strconv.Atoi(pidStr)
+		if err != nil {
+			fmt.Printf("Invalid PID found: %s\n", pidStr)
+			continue
+		}
+		fmt.Printf("Killing pid: %d\n", pidInt)
+
+		killCmd := exec.Command("taskkill", "/PID", strconv.Itoa(pidInt), "/F")
+		errr := killCmd.Run()
+		if errr != nil {
+			fmt.Printf("Failed to kill process with PID %d: %v\n", pidInt, errr)
 		}
 	}
 }
