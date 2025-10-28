@@ -78,7 +78,7 @@ func init() {
 	listCmd.Flags().StringVarP(&flagSearch, "look", "l", "", `Search/filter by::
 	- Port-> :80 
 	- Process-> nginx
-	- IP-> 192.168.0.90`)
+	- IP-> 192.168.0.90 | 192.168.`)
 	rootCmd.AddCommand(listCmd)
 
 	// Here you will define your flags and configuration settings.
@@ -225,6 +225,31 @@ func parseNetstatOutput(udpOnly bool, tcpOnly bool) []PortEntry {
 			entries[i].Process = "Unknown"
 			entries[i].User = "Unknown"
 		}
+	}
+
+	// search
+	if flagSearch != "" {		
+		var filteredEntries []PortEntry
+		for i := range entries {
+			srchStr := fmt.Sprintf("%s %s %s %s %s %s %s:%s %s:%s",
+									entries[i].PID, 
+									entries[i].Process,
+									entries[i].User,
+									entries[i].Type,
+									entries[i].Proto,
+									entries[i].State,
+									entries[i].LAddr,
+									entries[i].LPort,
+									entries[i].FAddr,
+									entries[i].FPort,
+								)
+			if strings.Contains(strings.ToLower(srchStr), strings.ToLower(flagSearch)) {
+				filteredEntries = append(filteredEntries, entries[i])
+			} else {
+				// fmt.Println("not match", "\t", strings.ToLower(flagSearch), "\t", strings.ToLower(srchStr))
+			}
+		}
+		return filteredEntries
 	}
 
 	return entries
