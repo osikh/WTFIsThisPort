@@ -22,25 +22,25 @@ import (
 
 var (
 	flagUser   bool
-    flagUDP    bool
-    flagAll    bool
-	flagSearch  string
+	flagUDP    bool
+	flagAll    bool
+	flagSearch string
 )
 
 type PortEntry struct {
-    Port     int
-    PID      string // Process Id
-    Process  string // Command
-	UID      string    // User Id
-    User     string // User owning the process
-	FD 		 string // File descriptor
-	Type     string // IPv[4|6]
-	Proto	 string // TCP | UDP
-    State    string // Listen | Established | Failed
-    LAddr    string
-	LPort    string
-	FAddr    string
-	FPort    string
+	Port    int
+	PID     string // Process Id
+	Process string // Command
+	UID     string // User Id
+	User    string // User owning the process
+	FD      string // File descriptor
+	Type    string // IPv[4|6]
+	Proto   string // TCP | UDP
+	State   string // Listen | Established | Failed
+	LAddr   string
+	LPort   string
+	FAddr   string
+	FPort   string
 }
 
 // listCmd represents the list command
@@ -50,7 +50,7 @@ var listCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var entries []PortEntry
 		switch runtime.GOOS {
-        case "windows":
+		case "windows":
 			if flagAll {
 				entries = parseNetstatOutput(true, true)
 			} else if flagUDP {
@@ -58,7 +58,7 @@ var listCmd = &cobra.Command{
 			} else {
 				entries = parseNetstatOutput(false, true)
 			}
-        default:
+		default:
 			if flagAll {
 				entries = parseLsofOutput(true, true)
 			} else if flagUDP {
@@ -66,7 +66,7 @@ var listCmd = &cobra.Command{
 			} else {
 				entries = parseLsofOutput(false, true)
 			}
-        }
+		}
 		printPrettyTable(entries, "🔥 WTF Is This Port?")
 	},
 }
@@ -74,9 +74,9 @@ var listCmd = &cobra.Command{
 func init() {
 	listCmd.Flags().BoolVarP(&flagUser, "show-user", "i", false, "Show user owning the process (windows only and painfully slow)")
 	listCmd.Flags().BoolVarP(&flagUDP, "udp", "u", false, "Show only UDP ports")
-    listCmd.Flags().BoolVarP(&flagAll, "all", "a", false, "Show only TCP ports")
+	listCmd.Flags().BoolVarP(&flagAll, "all", "a", false, "Show only TCP ports")
 	listCmd.Flags().StringVarP(&flagSearch, "look", "l", "", `Search/filter by::
-	- Port-> :80 
+	- Port-> :80
 	- Process-> nginx
 	- IP-> 192.168.0.90 | 192.168.`)
 	rootCmd.AddCommand(listCmd)
@@ -175,11 +175,11 @@ func parseNetstatOutput(udpOnly bool, tcpOnly bool) []PortEntry {
 
 		// skip this entry if not required
 		if tcpOnly && !udpOnly && entry.Proto != "TCP" {
-            continue
-        }
-        if udpOnly && !tcpOnly && entry.Proto != "UDP" {
-            continue
-        }
+			continue
+		}
+		if udpOnly && !tcpOnly && entry.Proto != "UDP" {
+			continue
+		}
 
 		entries = append(entries, entry)
 	}
@@ -189,7 +189,7 @@ func parseNetstatOutput(udpOnly bool, tcpOnly bool) []PortEntry {
 	if flagUser {
 		tasklistCmd = exec.Command("tasklist", "/V", "/FO", "CSV")
 	}
-	
+
 	tasklistOut, err := tasklistCmd.Output()
 	if err != nil {
 		fmt.Errorf("failed to run tasklist: %w", err)
@@ -228,21 +228,21 @@ func parseNetstatOutput(udpOnly bool, tcpOnly bool) []PortEntry {
 	}
 
 	// search
-	if flagSearch != "" {		
+	if flagSearch != "" {
 		var filteredEntries []PortEntry
 		for i := range entries {
 			srchStr := fmt.Sprintf("%s %s %s %s %s %s %s:%s %s:%s",
-									entries[i].PID, 
-									entries[i].Process,
-									entries[i].User,
-									entries[i].Type,
-									entries[i].Proto,
-									entries[i].State,
-									entries[i].LAddr,
-									entries[i].LPort,
-									entries[i].FAddr,
-									entries[i].FPort,
-								)
+				entries[i].PID,
+				entries[i].Process,
+				entries[i].User,
+				entries[i].Type,
+				entries[i].Proto,
+				entries[i].State,
+				entries[i].LAddr,
+				entries[i].LPort,
+				entries[i].FAddr,
+				entries[i].FPort,
+			)
 			if strings.Contains(strings.ToLower(srchStr), strings.ToLower(flagSearch)) {
 				filteredEntries = append(filteredEntries, entries[i])
 			} else {
@@ -260,22 +260,22 @@ func parseLsofOutput(udpOnly bool, tcpOnly bool) []PortEntry {
 	if flagSearch != "" {
 		cmdStr = fmt.Sprintf("sudo lsof -nP -i -a -l | grep %s", flagSearch)
 	}
-    cmd := exec.Command("bash", "-c", cmdStr)
-    out, err := cmd.Output()
+	cmd := exec.Command("bash", "-c", cmdStr)
+	out, err := cmd.Output()
 
-    if err != nil {
+	if err != nil {
 		fmt.Println("No record found!")
 		os.Exit(0)
 
-        fmt.Println("\033[31m❌ Error running lsof:\033[0m", err)
-        os.Exit(1)
-    }
+		fmt.Println("\033[31m❌ Error running lsof:\033[0m", err)
+		os.Exit(1)
+	}
 
-    var entries []PortEntry
-    scanner := bufio.NewScanner(strings.NewReader(string(out)))
-    for scanner.Scan() {
+	var entries []PortEntry
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
 		line := scanner.Text()
-        fields := strings.Fields(line)
+		fields := strings.Fields(line)
 
 		if fields[0] == "COMMAND" && fields[1] == "PID" {
 			continue
@@ -289,15 +289,15 @@ func parseLsofOutput(udpOnly bool, tcpOnly bool) []PortEntry {
 		}
 
 		entry := PortEntry{
-            Port:    0,
-            PID:     fields[1],
-            Process: fields[0],
-            UID:     uid,
+			Port:    0,
+			PID:     fields[1],
+			Process: fields[0],
+			UID:     uid,
 			User:    usr.Username,
-			FD: 	 fields[3],
+			FD:      fields[3],
 			Type:    fields[4],
-			Proto: 	 fields[7],
-        }
+			Proto:   fields[7],
+		}
 
 		state := "(UNKNOWN)"
 		if len(fields) > 9 {
@@ -310,12 +310,12 @@ func parseLsofOutput(udpOnly bool, tcpOnly bool) []PortEntry {
 
 		var expression = `^(\S+|\*):(\d+|\*) \((\w+)\)$`
 		// this one have foreign ip info extract it
-		if strings.Contains(fields[8], "->"){
+		if strings.Contains(fields[8], "->") {
 			expression = `^(\S+|\*):(\d+|\*)->(\S+):(\d+) \((\w+)\)$`
 		}
 
 		re := regexp.MustCompile(expression)
-		matches := re.FindStringSubmatch(fields[8]+" "+state)
+		matches := re.FindStringSubmatch(fields[8] + " " + state)
 
 		if len(matches) > 0 {
 
@@ -353,7 +353,7 @@ func parseLsofOutput(udpOnly bool, tcpOnly bool) []PortEntry {
 			entry.FAddr = foreignAddress
 			entry.FPort = foreignPort
 		} else {
-			entry.Type  = ""
+			entry.Type = ""
 			entry.LAddr = ""
 			entry.LPort = ""
 			entry.FAddr = ""
@@ -361,11 +361,11 @@ func parseLsofOutput(udpOnly bool, tcpOnly bool) []PortEntry {
 		}
 
 		if tcpOnly && !udpOnly && entry.Proto != "TCP" {
-            continue
-        }
-        if udpOnly && !tcpOnly && entry.Proto != "UDP" {
-            continue
-        }
+			continue
+		}
+		if udpOnly && !tcpOnly && entry.Proto != "UDP" {
+			continue
+		}
 
 		entries = append(entries, entry)
 	}
@@ -374,41 +374,40 @@ func parseLsofOutput(udpOnly bool, tcpOnly bool) []PortEntry {
 }
 
 func printPrettyTable(entries []PortEntry, title string) {
-    t := table.NewWriter()
-    t.SetOutputMirror(os.Stdout)
-    t.SetTitle(title)
-    t.AppendHeader(table.Row{"Proto", "Type", "Local Address", "Foreign Address", "State", "Process"})
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.SetTitle(title)
+	t.AppendHeader(table.Row{"Proto", "Type", "Local Address", "Foreign Address", "State", "Process"})
 
 	t.SetRowPainter(table.RowPainter(func(row table.Row) text.Colors {
 		var color = text.Colors{text.FgRed}
 		switch row[4] {
-			case "LISTEN":
-				return text.Colors{text.FgGreen}
-			case "ESTABLISHED":
-				return text.Colors{text.FgBlue}
+		case "LISTEN":
+			return text.Colors{text.FgGreen}
+		case "ESTABLISHED":
+			return text.Colors{text.FgBlue}
 		}
 		return color
 	}))
-	
 
-    seen := make(map[string]bool)
-    for _, e := range entries {
-        key := fmt.Sprintf("%d-%s-%s-%s-%s", e.Port, e.LAddr, e.PID, e.User, e.State)
-        if seen[key] {
-            continue // skip if key matches
-        }
-        seen[key] = true // to avoid duplicate
+	seen := make(map[string]bool)
+	for _, e := range entries {
+		key := fmt.Sprintf("%d-%s-%s-%s-%s", e.Port, e.LAddr, e.PID, e.User, e.State)
+		if seen[key] {
+			continue // skip if key matches
+		}
+		seen[key] = true // to avoid duplicate
 
 		var foreignAddr = ""
 		if len(e.FAddr) > 0 {
-			foreignAddr = e.FAddr+":"+e.FPort
+			foreignAddr = e.FAddr + ":" + e.FPort
 		}
-        
-		var r = table.Row{e.Proto, e.Type, e.LAddr+":"+e.LPort, foreignAddr, e.State, e.PID+"/"+e.Process+"@"+e.User}
-		t.AppendRow(r)
-    }
 
-    t.Render()
+		var r = table.Row{e.Proto, e.Type, e.LAddr + ":" + e.LPort, foreignAddr, e.State, e.PID + "/" + e.Process + "@" + e.User}
+		t.AppendRow(r)
+	}
+
+	t.Render()
 }
 
 func cleanIPPort(input string) string {

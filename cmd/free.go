@@ -30,7 +30,7 @@ It should be run with sudo privileges to ensure it can kill processes.`,
 		}
 
 		// Run the lsof and kill commands
-		freePort(port)
+		freeLinuxPort(port)
 	},
 }
 
@@ -48,7 +48,7 @@ func init() {
 	// freeCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
-func freePort(port string) {
+func freeLinuxPort(port string) {
 	// Execute the lsof command to find the process on the specified port
 	cmd := exec.Command("sudo", "lsof", "-t", "-i", ":"+port)
 	output, err := cmd.CombinedOutput()
@@ -65,7 +65,7 @@ func freePort(port string) {
 	}
 
 	// Split the PIDs and terminate each process
-	for _, pid := range splitLines(pids) {
+	for _, pid := range strings.Split(pids, "\n") {
 		pid = pid // Clean the PID to remove any extra whitespace
 		if pid != "" {
 			pidInt, err := strconv.Atoi(pid)
@@ -73,25 +73,15 @@ func freePort(port string) {
 				fmt.Printf("Invalid PID found: %s\n", pid)
 				continue
 			}
-            fmt.Printf("Killing pid: %d\n", pidInt)
-			killProcess(pidInt)
+			fmt.Printf("Killing pid: %d\n", pidInt)
+
+			cmd := exec.Command("sudo", "kill", "-9", strconv.Itoa(pidInt))
+			errr := cmd.Run()
+			if errr != nil {
+				// fmt.Printf("Failed to kill process with PID %d: %v\n", pid, err)
+			}
 		}
 	}
-}
-
-func splitLines(str string) []string {
-	return strings.Split(str, "\n")
-}
-
-func killProcess(pid int) {
-	// Run the kill command with -9 option to kill the process
-	cmd := exec.Command("sudo", "kill", "-9", strconv.Itoa(pid))
-	err := cmd.Run()
-	if err != nil {
-		// fmt.Printf("Failed to kill process with PID %d: %v\n", pid, err)
-		return
-	}
-	// fmt.Printf("Successfully killed process with PID %d.\n", pid)
 }
 
 func init() {
