@@ -49,7 +49,7 @@ func init() {
 
 func freeLinuxPort(port string) {
 	if os.Geteuid() != 0 {
-		fmt.Println("WARNING: This command should be run with sudo.")
+		fmt.Println("WARNING:: This command should be run with sudo.")
 		return
 	}
 
@@ -91,7 +91,7 @@ func freeLinuxPort(port string) {
 func freeWindowsPort(port string) {
 	// Check if running with elevated privileges on Windows
 	if err := exec.Command("net", "session").Run(); err != nil {
-		fmt.Println("WARNING: This command should be run with elevated privileges.")
+		fmt.Println("WARNING:: This command should be run with elevated privileges.")
 		return
 	}
 
